@@ -1,0 +1,1143 @@
+__name__ = 'Web_BeeHive_Indoor'
+
+# ============================================================
+# INDOOR BEEHIVE HUB / DASHBOARD
+# ============================================================
+#
+# PURPOSE:
+# This is the INDOOR receiver/dashboard code.
+#
+# At the moment, the Kookaberry can run by itself.
+# No sensors or HC-12 need to be connected yet.
+#
+# FUTURE SYSTEM:
+#
+# OUTDOOR BEEHIVE SYSTEM
+#     |
+#     | Sensors
+#     |
+# Outdoor Pico
+#     |
+#     | HC-12 radio
+#     v
+# Indoor HC-12
+#     |
+#     v
+# Indoor Kookaberry
+#     |
+#     v
+# Local Wi-Fi Dashboard
+
+# IMPORTANT:
+# The Kookaberry creates its OWN Wi-Fi network, INTERNET IS NOT REQUIRED.
+
+# The indoor hub does NOT directly read the sensors, it will eventually extract the sensor values from the data packet received through the HC-12.
+
+# ============================================================
+# IMPORT NECESSARY MODULES
+# ============================================================
+
+# network -> creates the Kookaberry Wi-Fi network
+# socket  -> creates the webpage server
+# time    -> timing functions
+# kooka   -> Kookaberry hardware/display
+# fonts   -> Kookaberry display fonts
+
+# ============================================================
+
+import network
+import socket
+import time
+import kooka
+import fonts
+
+# ============================================================
+# WI-FI SETTINGS
+# ============================================================
+
+# The Kookaberry creates its own Wi-Fi network.
+
+# Connect your laptop/phone to this network and enter the IP address shown on the Kookaberry into a web browser.
+# ============================================================
+
+ssid = 'Beehive monitoring system'
+password = '12345678'
+
+disp = kooka.display
+
+
+# ============================================================
+# FUTURE HC-12 RECEIVER
+# ============================================================
+#
+# The HC-12 will receive the data packet sent by the outdoor
+# Pico.
+#
+# The exact UART and pin numbers depend on the final wiring.
+#
+# CHANGE ACCORDING TO PIN ALLOCATION
+#
+# ============================================================
+
+# from machine import Pin, UART
+
+# HC12_TX_PIN = 'CHANGE ACCORDING TO PIN ALLOCATION' ex. 4
+# HC12_RX_PIN = 'CHANGE ACCORDING TO PIN ALLOCATION' ex. 5
+
+# hc12 = UART(
+#     1,
+#     baudrate=9600,
+#     tx=Pin(HC12_TX_PIN),
+#     rx=Pin(HC12_RX_PIN)
+# )
+
+
+# ============================================================
+# SENSOR DATA
+# ============================================================
+#
+# IMPORTANT
+# These readings are  eventually be extracted from the packet received through the HC-12 (beehive)
+
+#They are currently set to 0 so the dashboard can run without any hardware connected.
+
+# OUTDOOR TEMPERATURE SENSOR: BME280
+#
+# This will eventually come from the OUTDOOR Pico through the HC-12.
+#
+# CHANGE SENSOR IF FINAL WIRING USES A DIFFERENT SENSOR.
+
+# ------------------------------------------------------------
+
+outdoor_temperature = 0
+
+
+# BEEHIVE TEMPERATURE SENSOR: DHT22
+#
+# This is currently a placeholder mapping.
+# Change according to final sensor placement.
+#
+# ------------------------------------------------------------
+
+beehive_temperature = 0
+
+# HUMIDITY SENSOR: DHT22
+#
+# Change according to final sensor placement.
+#
+# ------------------------------------------------------------
+
+humidity = 0
+
+
+# ------------------------------------------------------------
+# AIR PRESSURE
+# ------------------------------------------------------------
+#
+# SENSOR: BME280
+#
+# ------------------------------------------------------------
+
+air_pressure = 0
+
+
+# ------------------------------------------------------------
+# LIGHT
+# ------------------------------------------------------------
+#
+# SENSOR: VEML7700
+#
+# ------------------------------------------------------------
+
+light_level = 0
+
+
+# ------------------------------------------------------------
+# GPS / LOCATION
+# ------------------------------------------------------------
+#
+# SENSOR: NEO-6M GPS
+#
+# ------------------------------------------------------------
+
+gps_latitude = 0
+gps_longitude = 0
+gps_altitude = 0
+
+
+# ------------------------------------------------------------
+# GPS DATE AND TIME
+# ------------------------------------------------------------
+#
+# SENSOR: NEO-6M GPS
+#
+# The outdoor system will eventually send the GPS time
+# together with the sensor readings.
+#
+# ------------------------------------------------------------
+
+recorded_date = '--/--/----'
+recorded_time = '--:--:--'
+
+
+# ------------------------------------------------------------
+# HIVE SOUND
+# ------------------------------------------------------------
+#
+# SENSOR: MICROPHONE
+#
+# ------------------------------------------------------------
+
+hive_sound = 0
+
+
+# ------------------------------------------------------------
+# POWER
+# ------------------------------------------------------------
+#
+# SENSOR: SOLAR CELL MONITORING MODULE
+#
+# ------------------------------------------------------------
+
+solar_voltage = 0
+solar_current = 0
+
+
+# ============================================================
+# WEBPAGE FUNCTION
+# ============================================================
+#
+# This function creates the dashboard webpage.
+#
+# The browser receives this HTML from the Kookaberry.
+#
+# ============================================================
+
+def webpage(
+    outdoor_temperature,
+    beehive_temperature,
+    humidity,
+    air_pressure,
+    light_level,
+    gps_latitude,
+    gps_longitude,
+    gps_altitude,
+    solar_voltage,
+    solar_current,
+    hive_sound,
+    recorded_date,
+    recorded_time
+):
+
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport"
+              content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#183f2b">
+        <title>BeeHive Monitoring System</title>
+
+        <style>
+            :root {{
+                --forest: #183f2b;
+                --leaf: #2f7654;
+                --leaf-light: #e2f0e7;
+                --honey: #e3a72f;
+                --honey-light: #fff3d6;
+                --ink: #213129;
+                --muted: #68766e;
+                --line: #dce5df;
+                --surface: #ffffff;
+                --background: #f3f7f4;
+            }}
+
+            * {{
+                box-sizing: border-box;
+            }}
+
+            body {{
+                margin: 0;
+                min-width: 300px;
+                color: var(--ink);
+                background: var(--background);
+                font-family: Arial, Helvetica, sans-serif;
+                line-height: 1.45;
+            }}
+
+            .topbar {{
+                color: #ffffff;
+                background: linear-gradient(135deg, #143722, #2f7654);
+                border-bottom: 5px solid var(--honey);
+            }}
+
+            .topbar-content {{
+                width: min(1080px, calc(100% - 32px));
+                margin: 0 auto;
+                padding: 34px 0 30px;
+            }}
+
+            .title-row {{
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: 18px;
+            }}
+
+            h1 {{
+                margin: 0;
+                font-size: clamp(1.9rem, 5vw, 3rem);
+                letter-spacing: -0.03em;
+            }}
+
+            .subtitle {{
+                max-width: 650px;
+                margin: 8px 0 0;
+                color: #d9e9df;
+                font-size: 1rem;
+            }}
+
+            .status {{
+                display: inline-flex;
+                flex: 0 0 auto;
+                align-items: center;
+                gap: 8px;
+                margin-top: 6px;
+                padding: 8px 13px;
+                color: #ffffff;
+                background: rgba(255, 255, 255, 0.12);
+                border: 1px solid rgba(255, 255, 255, 0.28);
+                border-radius: 999px;
+                font-size: 0.84rem;
+                font-weight: 700;
+            }}
+
+            .status-dot {{
+                width: 9px;
+                height: 9px;
+                background: #79e49f;
+                border-radius: 50%;
+                box-shadow: 0 0 0 4px rgba(121, 228, 159, 0.15);
+            }}
+
+            main {{
+                width: min(1080px, calc(100% - 32px));
+                margin: 0 auto;
+                padding: 30px 0 40px;
+            }}
+
+            .record-banner {{
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 16px;
+                margin-bottom: 30px;
+                padding: 17px 20px;
+                background: var(--honey-light);
+                border: 1px solid #efd99f;
+                border-radius: 14px;
+            }}
+
+            .record-heading {{
+                margin: 0 0 3px;
+                color: #6f5117;
+                font-size: 0.76rem;
+                font-weight: 700;
+                letter-spacing: 0.1em;
+                text-transform: uppercase;
+            }}
+
+            .record-value {{
+                margin: 0;
+                color: #3f3420;
+                font-size: 1.05rem;
+                font-weight: 700;
+            }}
+
+            .refresh-note {{
+                margin: 0;
+                color: #735f36;
+                font-size: 0.84rem;
+                text-align: right;
+            }}
+
+            .section {{
+                margin-top: 32px;
+            }}
+
+            .section:first-of-type {{
+                margin-top: 0;
+            }}
+
+            .section-heading {{
+                display: flex;
+                align-items: center;
+                gap: 11px;
+                margin-bottom: 15px;
+            }}
+
+            .section-mark {{
+                width: 5px;
+                height: 25px;
+                background: var(--honey);
+                border-radius: 99px;
+            }}
+
+            h2 {{
+                margin: 0;
+                font-size: 1.25rem;
+                letter-spacing: -0.01em;
+            }}
+
+            .card-grid {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+                gap: 15px;
+            }}
+
+            .metric-card {{
+                position: relative;
+                min-height: 142px;
+                padding: 20px;
+                overflow: hidden;
+                background: var(--surface);
+                border: 1px solid var(--line);
+                border-radius: 16px;
+                box-shadow: 0 8px 24px rgba(23, 57, 39, 0.06);
+            }}
+
+            .metric-card::after {{
+                content: "";
+                position: absolute;
+                right: -22px;
+                bottom: -28px;
+                width: 82px;
+                height: 82px;
+                background: var(--leaf-light);
+                border-radius: 50%;
+            }}
+
+            .metric-label {{
+                position: relative;
+                z-index: 1;
+                margin: 0;
+                color: var(--muted);
+                font-size: 0.78rem;
+                font-weight: 700;
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
+            }}
+
+            .metric-value {{
+                position: relative;
+                z-index: 1;
+                margin: 20px 0 0;
+                color: var(--forest);
+                font-size: clamp(1.65rem, 4vw, 2.15rem);
+                font-weight: 700;
+                line-height: 1;
+                overflow-wrap: anywhere;
+            }}
+
+            .unit {{
+                margin-left: 4px;
+                color: var(--muted);
+                font-size: 0.95rem;
+                font-weight: 600;
+            }}
+
+            .wide-value {{
+                font-size: clamp(1.3rem, 3.2vw, 1.8rem);
+            }}
+
+            footer {{
+                padding: 20px 16px 30px;
+                color: var(--muted);
+                font-size: 0.82rem;
+                text-align: center;
+            }}
+
+            @media (max-width: 620px) {{
+                .topbar-content {{
+                    padding: 27px 0 24px;
+                }}
+
+                .title-row {{
+                    display: block;
+                }}
+
+                .status {{
+                    margin-top: 18px;
+                }}
+
+                .record-banner {{
+                    display: block;
+                }}
+
+                .refresh-note {{
+                    margin-top: 8px;
+                    text-align: left;
+                }}
+
+                .card-grid {{
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }}
+
+                .metric-card {{
+                    min-height: 130px;
+                    padding: 17px;
+                }}
+            }}
+
+            @media (max-width: 410px) {{
+                .card-grid {{
+                    grid-template-columns: 1fr;
+                }}
+            }}
+        </style>
+    </head>
+
+    <body>
+        <header class="topbar">
+            <div class="topbar-content">
+                <div class="title-row">
+                    <div>
+                        <h1>BeeHive Monitoring System</h1>
+                        <p class="subtitle">
+                            Indoor hub dashboard for environmental, location,
+                            power and hive activity measurements.
+                        </p>
+                    </div>
+                    <div class="status">
+                        <span class="status-dot"></span>
+                        Local dashboard online
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <div class="record-banner">
+                <div>
+                    <p class="record-heading">Latest recorded reading</p>
+                    <p class="record-value">
+                        {recorded_date} &nbsp; | &nbsp; {recorded_time}
+                    </p>
+                </div>
+                <p class="refresh-note">Page refreshes every 10 seconds</p>
+            </div>
+
+            <section class="section">
+                <div class="section-heading">
+                    <span class="section-mark"></span>
+                    <h2>Hive and Environment</h2>
+                </div>
+                <div class="card-grid">
+                    <article class="metric-card">
+                        <p class="metric-label">Outdoor Temperature</p>
+                        <p class="metric-value">
+                            {outdoor_temperature}<span class="unit">&deg;C</span>
+                        </p>
+                    </article>
+
+                    <article class="metric-card">
+                        <p class="metric-label">Beehive Temperature</p>
+                        <p class="metric-value">
+                            {beehive_temperature}<span class="unit">&deg;C</span>
+                        </p>
+                    </article>
+
+                    <article class="metric-card">
+                        <p class="metric-label">Humidity</p>
+                        <p class="metric-value">
+                            {humidity}<span class="unit">%</span>
+                        </p>
+                    </article>
+
+                    <article class="metric-card">
+                        <p class="metric-label">Air Pressure</p>
+                        <p class="metric-value">
+                            {air_pressure}<span class="unit">hPa</span>
+                        </p>
+                    </article>
+
+                    <article class="metric-card">
+                        <p class="metric-label">Light Level</p>
+                        <p class="metric-value">
+                            {light_level}<span class="unit">lux</span>
+                        </p>
+                    </article>
+                </div>
+            </section>
+
+            <section class="section">
+                <div class="section-heading">
+                    <span class="section-mark"></span>
+                    <h2>Location / GPS</h2>
+                </div>
+                <div class="card-grid">
+                    <article class="metric-card">
+                        <p class="metric-label">Latitude</p>
+                        <p class="metric-value wide-value">{gps_latitude}</p>
+                    </article>
+
+                    <article class="metric-card">
+                        <p class="metric-label">Longitude</p>
+                        <p class="metric-value wide-value">{gps_longitude}</p>
+                    </article>
+
+                    <article class="metric-card">
+                        <p class="metric-label">Altitude</p>
+                        <p class="metric-value">
+                            {gps_altitude}<span class="unit">m</span>
+                        </p>
+                    </article>
+                </div>
+            </section>
+
+            <section class="section">
+                <div class="section-heading">
+                    <span class="section-mark"></span>
+                    <h2>Power</h2>
+                </div>
+                <div class="card-grid">
+                    <article class="metric-card">
+                        <p class="metric-label">Solar Voltage</p>
+                        <p class="metric-value">
+                            {solar_voltage}<span class="unit">V</span>
+                        </p>
+                    </article>
+
+                    <article class="metric-card">
+                        <p class="metric-label">Solar Current</p>
+                        <p class="metric-value">
+                            {solar_current}<span class="unit">mA</span>
+                        </p>
+                    </article>
+                </div>
+            </section>
+
+            <section class="section">
+                <div class="section-heading">
+                    <span class="section-mark"></span>
+                    <h2>Hive Sound</h2>
+                </div>
+                <div class="card-grid">
+                    <article class="metric-card">
+                        <p class="metric-label">Sound Level</p>
+                        <p class="metric-value">{hive_sound}</p>
+                    </article>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            BeeHive Monitoring System &middot; Indoor receiver node
+        </footer>
+
+        <!-- Refresh the complete local dashboard every 10 seconds. -->
+        <script>
+            setInterval(function() {{
+                location.reload(true);
+            }}, 10000);
+        </script>
+    </body>
+
+    </html>
+    """
+
+    return str(html)
+
+
+# ============================================================
+# START WI-FI ACCESS POINT
+# ============================================================
+#
+# Creates a local Wi-Fi network directly from the Kookaberry.
+#
+# INTERNET IS NOT REQUIRED.
+#
+# ============================================================
+
+disp.print('BeeHive Dashboard')
+
+disp.print('SSID %s' % ssid)
+
+
+wlan = network.WLAN(
+    network.AP_IF
+)
+
+
+wlan.config(
+    essid=ssid,
+    password=password
+)
+
+
+wlan.active(True)
+
+
+# ============================================================
+# WAIT FOR WI-FI TO ACTIVATE
+# ============================================================
+
+while wlan.active() == False:
+
+    pass
+
+
+print(
+    'AP Mode Is Active, You can Now Connect'
+)
+
+
+# ============================================================
+# GET IP ADDRESS
+# ============================================================
+#
+# This is the IP address you enter into your browser.
+#
+# ============================================================
+
+addr = wlan.ifconfig()[0]
+
+
+print(
+    'IP Address to connect to: ' + addr
+)
+
+
+disp.print('AP Active')
+
+disp.print('Connect to:')
+
+disp.print(addr)
+
+
+# ============================================================
+# CREATE WEB SERVER
+# ============================================================
+#
+# The socket waits for a laptop/phone to request the
+# dashboard webpage.
+#
+# ============================================================
+
+s = socket.socket(
+    socket.AF_INET,
+    socket.SOCK_STREAM
+)
+
+
+s.bind(
+    ('', 80)
+)
+
+
+s.listen(1)
+
+
+print(
+    'Listening on',
+    addr
+)
+
+
+disp.print('Listening')
+
+
+# ============================================================
+# MAIN LOOP
+# ============================================================
+
+while True:
+
+
+    # ========================================================
+    # HC-12 RECEIVE DATA
+    # ========================================================
+    #
+    # FUTURE:
+    #
+    # The outdoor Pico will transmit a packet such as:
+    #
+    # TEMP_OUT=25.4,
+    # TEMP_HIVE=34.1,
+    # HUM=61.2,
+    # PRESS=1013.4,
+    # LIGHT=450,
+    # LAT=-34.4068,
+    # LON=150.8821,
+    # ALT=35,
+    # SOLAR_V=5.2,
+    # SOLAR_I=120,
+    # SOUND=45,
+    # DATE=12/08/2026,
+    # TIME=15:42:18
+    #
+    # The indoor hub will NOT measure these values.
+    #
+    # It will extract the values from the HC-12 packet.
+    #
+    # CHANGE ACCORDING TO FINAL HC-12 DATA FORMAT.
+    #
+    # ========================================================
+
+
+    # if hc12.any():
+
+    #     data = hc12.readline()
+
+    #     if data:
+
+    #         data = data.decode().strip()
+
+    #         values = data.split(',')
+
+
+    #         for value in values:
+
+
+    #             # ------------------------------------------
+    #             # OUTDOOR TEMPERATURE
+    #             # SENSOR: BME280
+    #             # ------------------------------------------
+
+    #             if value.startswith('TEMP_OUT='):
+
+    #                 outdoor_temperature = float(
+    #                     value.replace('TEMP_OUT=', '')
+    #                 )
+
+
+    #             # ------------------------------------------
+    #             # BEEHIVE TEMPERATURE
+    #             # SENSOR: DHT22
+    #             # ------------------------------------------
+
+    #             elif value.startswith('TEMP_HIVE='):
+
+    #                 beehive_temperature = float(
+    #                     value.replace('TEMP_HIVE=', '')
+    #                 )
+
+
+    #             # ------------------------------------------
+    #             # HUMIDITY
+    #             # SENSOR: DHT22
+    #             # ------------------------------------------
+
+    #             elif value.startswith('HUM='):
+
+    #                 humidity = float(
+    #                     value.replace('HUM=', '')
+    #                 )
+
+
+    #             # ------------------------------------------
+    #             # AIR PRESSURE
+    #             # SENSOR: BME280
+    #             # ------------------------------------------
+
+    #             elif value.startswith('PRESS='):
+
+    #                 air_pressure = float(
+    #                     value.replace('PRESS=', '')
+    #                 )
+
+
+    #             # ------------------------------------------
+    #             # LIGHT
+    #             # SENSOR: VEML7700
+    #             # ------------------------------------------
+
+    #             elif value.startswith('LIGHT='):
+
+    #                 light_level = float(
+    #                     value.replace('LIGHT=', '')
+    #                 )
+
+
+    #             # ------------------------------------------
+    #             # GPS LATITUDE
+    #             # SENSOR: NEO-6M GPS
+    #             # ------------------------------------------
+
+    #             elif value.startswith('LAT='):
+
+    #                 gps_latitude = float(
+    #                     value.replace('LAT=', '')
+    #                 )
+
+
+    #             # ------------------------------------------
+    #             # GPS LONGITUDE
+    #             # SENSOR: NEO-6M GPS
+    #             # ------------------------------------------
+
+    #             elif value.startswith('LON='):
+
+    #                 gps_longitude = float(
+    #                     value.replace('LON=', '')
+    #                 )
+
+
+    #             # ------------------------------------------
+    #             # GPS ALTITUDE
+    #             # SENSOR: NEO-6M GPS
+    #             # ------------------------------------------
+
+    #             elif value.startswith('ALT='):
+
+    #                 gps_altitude = float(
+    #                     value.replace('ALT=', '')
+    #                 )
+
+
+    #             # ------------------------------------------
+    #             # SOLAR VOLTAGE
+    #             # SENSOR: SOLAR MONITORING MODULE
+    #             # ------------------------------------------
+
+    #             elif value.startswith('SOLAR_V='):
+
+    #                 solar_voltage = float(
+    #                     value.replace('SOLAR_V=', '')
+    #                 )
+
+
+    #             # ------------------------------------------
+    #             # SOLAR CURRENT
+    #             # SENSOR: SOLAR MONITORING MODULE
+    #             # ------------------------------------------
+
+    #             elif value.startswith('SOLAR_I='):
+
+    #                 solar_current = float(
+    #                     value.replace('SOLAR_I=', '')
+    #                 )
+
+
+    #             # ------------------------------------------
+    #             # HIVE SOUND
+    #             # SENSOR: MICROPHONE
+    #             # ------------------------------------------
+
+    #             elif value.startswith('SOUND='):
+
+    #                 hive_sound = float(
+    #                     value.replace('SOUND=', '')
+    #                 )
+
+
+    #             # ------------------------------------------
+    #             # GPS DATE
+    #             # SENSOR: NEO-6M GPS
+    #             # ------------------------------------------
+
+    #             elif value.startswith('DATE='):
+
+    #                 recorded_date = value.replace(
+    #                     'DATE=',
+    #                     ''
+    #                 )
+
+
+    #             # ------------------------------------------
+    #             # GPS TIME
+    #             # SENSOR: NEO-6M GPS
+    #             # ------------------------------------------
+
+    #             elif value.startswith('TIME='):
+
+    #                 recorded_time = value.replace(
+    #                     'TIME=',
+    #                     ''
+    #                 )
+
+
+    # ========================================================
+    # UPDATE KOOKABERRY DISPLAY
+    # ========================================================
+    #
+    # Shows the main measurements and IP address on the
+    # physical Kookaberry display.
+    #
+    # ========================================================
+
+    disp.fill(0)
+
+
+    disp.setfont(fonts.mono8x8)
+
+
+    disp.text(
+        'BeeHive Dashboard',
+        0,
+        6
+    )
+
+
+    disp.setfont(fonts.mono6x7)
+
+
+    disp.text(
+        'Out: %5.1f C' % outdoor_temperature,
+        0,
+        20
+    )
+
+
+    disp.text(
+        'Hive: %4.1f C' % beehive_temperature,
+        0,
+        30
+    )
+
+
+    disp.text(
+        'Hum: %5.1f %%' % humidity,
+        0,
+        40
+    )
+
+
+    disp.text(
+        'Press:%5.1f' % air_pressure,
+        0,
+        50
+    )
+
+
+    disp.text(
+        'IP: %s' % addr,
+        0,
+        60
+    )
+
+
+    disp.show()
+
+
+    # ========================================================
+    # PROCESS WEB CONNECTION
+    # ========================================================
+    #
+    # Wait for a laptop/phone to request the dashboard.
+    #
+    # ========================================================
+
+    try:
+
+        conn, addrx = s.accept()
+
+
+        print(
+            'Got a connection from',
+            addrx
+        )
+
+
+        # Receive browser request
+
+        request = conn.recv(1024)
+
+
+        request = str(request)
+
+
+        print(
+            'Request content = %s'
+            % request
+        )
+
+
+        # ====================================================
+        # CREATE WEBPAGE
+        # ====================================================
+
+        response = webpage(
+
+            round(
+                outdoor_temperature,
+                1
+            ),
+
+            round(
+                beehive_temperature,
+                1
+            ),
+
+            round(
+                humidity,
+                1
+            ),
+
+            round(
+                air_pressure,
+                1
+            ),
+
+            round(
+                light_level,
+                1
+            ),
+
+            gps_latitude,
+
+            gps_longitude,
+
+            gps_altitude,
+
+            round(
+                solar_voltage,
+                2
+            ),
+
+            round(
+                solar_current,
+                1
+            ),
+
+            hive_sound,
+
+            recorded_date,
+
+            recorded_time
+
+        )
+
+
+        # ====================================================
+        # SEND WEBPAGE
+        # ====================================================
+
+        conn.send(
+            'HTTP/1.0 200 OK\r\n'
+            'Content-type: text/html\r\n'
+            '\r\n'
+        )
+
+
+        conn.send(response)
+
+
+        # ====================================================
+        # CLOSE CONNECTION
+        # ====================================================
+
+        conn.close()
+
+
+    except OSError as e:
+
+        try:
+
+            conn.close()
+
+        except:
+
+            pass
