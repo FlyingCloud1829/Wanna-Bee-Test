@@ -1,0 +1,310 @@
+import machine
+import time
+import fonts
+
+from machine import SoftI2C, Pin
+from sh1106 import SH1106_I2C
+
+
+# ============================================================
+# SELECT SENSOR TO TEST
+# ============================================================
+
+# Change this one line depending on the sensor being tested
+
+TEST_SENSOR = "AHT21"
+
+# Options:
+# "BME1"
+# "BME2"
+# "VEML"
+# "DHT22"
+# "AHT21"
+# "ENS160"
+# "MIC"
+
+
+# ============================================================
+# I2C SETUP
+# ============================================================
+
+i2c = SoftI2C(
+    scl=Pin("P3A"),
+    sda=Pin("P3B")
+)
+
+
+# ============================================================
+# EXTERNAL SH1106 DISPLAY SETUP
+# ============================================================
+
+beehivedisp = SH1106_I2C(
+    128,
+    64,
+    i2c,
+    addr=60
+)
+
+
+
+# Define global objects.
+i2c = SoftI2C(scl="P3A", sda="P3B")
+display_kbhjb = SH1106_I2C(128, 64, i2c, addr=60)
+
+beehivedisp.setfont(fonts.mono5x5)
+
+
+# ============================================================
+# BME280 SENSOR 1
+# ============================================================
+
+if TEST_SENSOR == "BME1":
+
+    from bme280 import BME280
+
+    sensor = BME280(
+        i2c=i2c,
+        address=0x77
+    )
+
+    while True:
+
+        temperature = sensor.values[0]
+        pressure = sensor.values[1]
+        humidity = sensor.values[2]
+
+        beehivedisp.clear()
+
+        beehivedisp.print("BME280 #1", show=0)
+        beehivedisp.print("Temp: " + str(temperature) + " C", show=0)
+        beehivedisp.print("Press: " + str(pressure), show=0)
+        beehivedisp.print("Hum: " + str(humidity) + " %", show=0)
+
+        beehivedisp.show()
+
+        time.sleep(2)
+
+
+# ============================================================
+# BME280 SENSOR 2
+# ============================================================
+
+elif TEST_SENSOR == "BME2":
+
+    from bme280 import BME280
+
+    sensor = BME280(
+        i2c=i2c,
+        address=0x77
+    )
+
+    while True:
+
+        temperature = sensor.values[0]
+        pressure = sensor.values[1]
+        humidity = sensor.values[2]
+
+        beehivedisp.clear()
+
+        beehivedisp.print("BME280 #2", show=0)
+        beehivedisp.print("Temp: " + str(temperature) + " C", show=0)
+        beehivedisp.print("Press: " + str(pressure), show=0)
+        beehivedisp.print("Hum: " + str(humidity) + " %", show=0)
+
+        beehivedisp.show()
+
+        time.sleep(2)
+
+
+# ============================================================
+# VEML7700 LIGHT SENSOR
+# ============================================================
+
+elif TEST_SENSOR == "VEML":
+    
+    import veml7700
+   
+    veml = veml7700.VEML7700(i2c=i2c)
+    
+    while True:
+
+        light = veml.read_lux()
+
+        beehivedisp.clear()
+
+        beehivedisp.print("VEML7700", show=0)
+        beehivedisp.print("Light:", show=0)
+        beehivedisp.print(str(light) + " Lux", show=0)
+
+        beehivedisp.show()
+
+        time.sleep(2)
+
+
+# ============================================================
+# DHT22
+# ============================================================
+
+elif TEST_SENSOR == "DHT22":
+
+    import dht
+
+    sensor = dht.DHT22(Pin("P4"))
+
+    while True:
+
+        sensor.measure()
+
+        temperature = sensor.temperature()
+        humidity = sensor.humidity()
+
+        beehivedisp.clear()
+
+        beehivedisp.print("DHT22", show=0)
+        beehivedisp.print("Temp: " + str(temperature) + " C", show=0)
+        beehivedisp.print("Hum: " + str(humidity) + " %", show=0)
+
+        beehivedisp.show()
+
+        time.sleep(2)
+
+
+# ============================================================
+# AHT21
+# ============================================================
+
+elif TEST_SENSOR == "AHT21":
+
+    from aht21 import AHT21
+
+    sensor = AHT21(i2c=i2c)
+    while True:
+
+        humidity, temperature = sensor.read()
+
+        beehivedisp.clear()
+
+        beehivedisp.print("AHT21", show=0)
+        beehivedisp.print("Temp: " + str(temperature) + " C", show=0)
+        beehivedisp.print("Hum: " + str(humidity) + " %", show=0)
+
+        beehivedisp.show()
+
+        time.sleep(2)
+
+
+# ============================================================
+# ENS160
+# ============================================================
+
+elif TEST_SENSOR == "ENS160":
+
+    from ens160 import ENS160
+
+    sensor = ENS160(
+        bus=i2c,
+        address=0x53
+    )
+
+    while True:
+
+        aqi = sensor.aqi
+        eco2 = sensor.eco2
+        tvoc = sensor.tvoc
+
+        beehivedisp.clear()
+
+        beehivedisp.print("ENS160", show=0)
+        beehivedisp.print("AQI: " + str(aqi), show=0)
+        beehivedisp.print("eCO2: " + str(eco2), show=0)
+        beehivedisp.print("TVOC: " + str(tvoc), show=0)
+
+        beehivedisp.show()
+
+        time.sleep(2)
+
+
+# ============================================================
+# MICROPHONE FREQUENCY ANALYSIS
+# ============================================================
+
+elif TEST_SENSOR == "MIC":
+
+    import math
+    import array
+    import kooka
+    import goertzel
+
+    audio_pin = "P1"
+
+    freq_min = 40
+    freq_max = 4000
+    freq_res = 40
+
+    freq_bins = int(
+        math.ceil(
+            (freq_max - freq_min) / freq_res
+        )
+    )
+
+    sample_rate = int(freq_max * 2)
+
+    samples = int(sample_rate / freq_res)
+
+    sample_buf = array.array(
+        "H",
+        0 for _ in range(samples)
+    )
+
+    adc = machine.ADC(audio_pin)
+
+    spectrum = [0] * freq_bins
+
+    while True:
+
+        kooka.read_timed(
+            adc,
+            sample_buf,
+            sample_rate
+        )
+
+        freqs, powers = goertzel.goertzel(
+            sample_buf,
+            sample_rate,
+            (freq_min, freq_max)
+        )
+
+        for i in range(0, len(powers)):
+            spectrum[i] = powers[i][2]
+
+        dominant_frequency = freqs[
+            spectrum.index(max(spectrum))
+        ]
+
+        dominant_power = max(spectrum)
+
+        beehivedisp.clear()
+
+        beehivedisp.print("MICROPHONE", show=0)
+        beehivedisp.print("Peak Frequency:", show=0)
+        beehivedisp.print(str(dominant_frequency) + " Hz", show=0)
+        beehivedisp.print("Power:", show=0)
+        beehivedisp.print(str(dominant_power), show=0)
+
+        beehivedisp.show()
+
+        time.sleep(2)
+
+
+# ============================================================
+# INVALID SENSOR SELECTION
+# ============================================================
+
+else:
+
+    beehivedisp.clear()
+
+    beehivedisp.print("INVALID SENSOR", show=0)
+    beehivedisp.print(TEST_SENSOR, show=0)
+
+    beehivedisp.show()
