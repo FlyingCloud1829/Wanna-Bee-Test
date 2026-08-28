@@ -643,3 +643,150 @@ process_hc12_data()
 
 This approach preserves the successful HC-12 communication work while providing a simple and safe way to return to the original program behaviour.
 
+# Weight Sensor Operating Instructions
+
+The weighing system consists of four three-wire load cells, a metal weighing platform, and an HX711 data acquisition board. The four load cells are combined to form one Wheatstone bridge. Therefore, the system measures the total weight applied to the platform and cannot provide four independent load-cell readings with the current hardware.
+
+## 1. Connecting the System to the Pico 2
+
+| Weight sensor connection | Pico 2 connection         |
+| ------------------------ | ------------------------- |
+| VCC                      | 3V3(OUT), physical pin 36 |
+| GND                      | Any GND pin               |
+| DOUT/DT                  | GP4, physical pin 6       |
+| SCK/CLK                  | GP5, physical pin 7       |
+
+Disconnect the power before connecting or modifying any wiring. The HX711 board should be powered from the Pico’s 3.3 V output. Do not connect it to 5 V unless the board specifications and pinout have been confirmed.
+
+GP4 and GP5 are currently used for the standalone weight-sensor test. If the final system also uses these pins for I²C sensors, the HX711 must be moved to two unused GPIO pins because it cannot share these pins with the I²C bus.
+
+## 2. Running the Test Program
+
+Copy `Pico2_HX711_Weight_Test.py` to the Pico 2 and save it as `main.py`. Connect the Pico 2 to a computer through USB and open the MicroPython Shell or another USB serial terminal.
+
+A separate display is not required. All measurement results are transmitted to the computer using `print()`.
+
+When the program starts, it should display:
+
+```text
+Checking HX711 communication...
+HX711 detected
+```
+
+The `HX711 detected` message confirms that the Pico 2 can communicate with the HX711. If `HX711 timeout` appears, check the 3.3 V, GND, DOUT and SCK connections.
+
+## 3. Automatic Tare
+
+The program performs a five-second countdown before automatically setting the zero point. During this period:
+
+* Remove all objects from the platform.
+* Do not touch or press the platform.
+* Ensure that the platform is not touching its enclosure or nearby objects.
+* Ensure that the cables are not pulling on or supporting the platform.
+
+After the countdown, the program calculates the unloaded offset and prints:
+
+```text
+Tare complete | ZERO_OFFSET=...
+```
+
+The system should be tared again whenever the platform is moved, reinstalled or restarted.
+
+## 4. Understanding the Output
+
+Before calibration, the program continuously produces output similar to:
+
+```text
+SAMPLE=00001 | TIME_MS=8250 | TOTAL_RAW=-248415.7 | TOTAL_DELTA=4.6
+```
+
+The fields represent:
+
+* `SAMPLE`: measurement number;
+* `TIME_MS`: time since the Pico started, in milliseconds;
+* `TOTAL_RAW`: raw HX711 reading for the complete platform;
+* `TOTAL_DELTA`: difference between the current reading and the unloaded zero offset.
+
+When an object is placed on the platform, `TOTAL_DELTA` should change noticeably. After the object is removed, it should return close to zero.
+
+## 5. Calibrating the Weight Measurement
+
+Allow the platform to complete the automatic tare process, then place an accurately known mass in the centre of the platform. Wait for the readings to stabilise and calculate the average `TOTAL_DELTA` from several measurements.
+
+Calculate the calibration factor using:
+
+$$
+\text{CALIBRATION\_FACTOR}
+=
+\frac{\text{average TOTAL\_DELTA}}
+{\text{known mass in kg}}
+$$
+
+For example, if a 5 kg mass produces:
+
+```text
+TOTAL_DELTA = 107250
+```
+
+then:
+
+$$
+\text{CALIBRATION\_FACTOR}
+=
+\frac{107250}{5}
+=
+21450
+$$
+
+Change the following line in the program:
+
+```python
+CALIBRATION_FACTOR = None
+```
+
+to:
+
+```python
+CALIBRATION_FACTOR = 21450.0
+```
+
+After restarting the program, the calibrated output will include:
+
+```text
+TOTAL_KG=5.000
+```
+
+If `TOTAL_DELTA` becomes negative when weight is added, use a negative calibration factor. This does not affect the final weight measurement.
+
+## 6. Four-Corner Consistency Test
+
+The present hardware cannot measure the four load cells independently. However, the same known mass can be used to check whether all four load cells respond consistently.
+
+1. Place the known mass in the centre of the platform and record the stable total reading.
+2. Move the same mass to each of the four corners.
+3. Record at least five stable readings at each position and calculate their averages.
+4. Compare the centre measurement with the four corner measurements.
+
+The corner error can be calculated as:
+
+$$
+\text{Corner Error}
+=
+\frac{|\text{corner reading}-\text{centre reading}|}
+{\text{centre reading}}
+\times100\%
+$$
+
+The four corner readings should be reasonably close to the centre reading. If one corner produces a much smaller, unstable or unchanged reading, inspect the corresponding load cell, its red, white and black wires, the screw terminals and the mechanical installation.
+
+## 7. Important Precautions
+
+* Place the platform on a firm, level and stable surface.
+* All four load cells must support the platform correctly.
+* The upper platform must not rub against the base, enclosure or nearby structures.
+* Keep the cables loose so they do not pull on or support the platform.
+* Do not apply a heavy load until the sensor’s rated capacity has been confirmed.
+* Use a calibration mass that is reasonably close to the expected beehive operating weight.
+* Tare the system after moving it, changing its installation or restarting the Pico.
+* Wait for the readings to stabilise before recording a measurement.
+* Protect the circuit board and terminals from water, dust, insects and accidental contact during final installation.
