@@ -51,20 +51,49 @@ i2c = SoftI2C(
 # EXTERNAL SH1106 DISPLAY SETUP
 # ============================================================
 
-beehivedisp = SH1106_I2C(
-    128,
-    64,
-    i2c,
-    addr=60
-)
+class NoDisplay:
+    """No-op replacement used when the optional OLED is absent."""
+
+    def clear(self):
+        pass
+
+    def print(self, *args, **kwargs):
+        pass
+
+    def show(self):
+        pass
+
+    def setfont(self, *args, **kwargs):
+        pass
+
+
+OLED_AVAILABLE = False
+
+try:
+    beehivedisp = SH1106_I2C(
+        128,
+        64,
+        i2c,
+        addr=60
+    )
 
 
 
-# Define global objects.
-i2c = SoftI2C(scl="P3A", sda="P3B")
-display_kbhjb = SH1106_I2C(128, 64, i2c, addr=60)
+    # Define global objects.
+    i2c = SoftI2C(scl="P3A", sda="P3B")
+    display_kbhjb = SH1106_I2C(128, 64, i2c, addr=60)
 
-beehivedisp.setfont(fonts.mono5x5)
+    beehivedisp.setfont(fonts.mono5x5)
+    OLED_AVAILABLE = True
+
+except OSError as display_error:
+    # ENODEV means no OLED responded on the I2C bus. The OLED is
+    # optional during the HC-12 test, so radio transmission continues.
+    print("WARNING: SH1106 OLED not found:", display_error)
+    print("HC-12 transmission test will continue without the OLED.")
+
+    beehivedisp = NoDisplay()
+    display_kbhjb = beehivedisp
 
 
 # ============================================================
